@@ -1,0 +1,19 @@
+#!/bin/dash
+
+directory=".girt"
+log="$directory/log.txt"
+
+if [ ! -d "$directory" ]
+then
+    echo "girt-log: error: girt repository directory .girt not found"
+    exit 1
+elif [ ! $# -eq 0 ]
+then
+    echo "usage: girt-log"
+elif [ ! -f "$log" ]
+then
+    # create empty log file if it doesn't exist
+    touch $log
+else
+    cat $log
+fi

@@ -1,0 +1,123 @@
+#!/bin/dash
+
+directory=".girt"
+index="$directory/index"
+commit="$directory/commit"
+status="$directory/status.txt"
+
+if [ ! -d "$directory" ]
+then
+    echo "girt-status: error: girt repository directory .girt not found"
+    exit 1
+elif [ ! $# -eq 0 ]
+then
+    echo "usage: girt-status"
+elif [ ! -f "$status" ]
+then
+    # no add done yet, so just create status.txt and echo every file as untracked
+    touch $status
+    for file in *
+    do
+        if [ -f "$file" ]
+        then
+            echo "$file - untracked"
+        fi
+    done
+else
+    # iterate through commits to get the latest version + 1 (next commit number)
+    version=0
+    while :
+    do
+        if [ ! -d "$commit.$version" ]
+        then
+            break
+        else
+            version=$((version + 1))
+        fi
+    done
+    last_ver=$((version - 1))
+    
+    # traverse through every file in current directory and add if not in status.txt
+    for file in *
+    do
+        if [ -f "$file" ]
+        then
+            if ! grep -q "$file" "$status"
+            then      
+                echo "$file" >> "$status"
+            fi
+        fi
+    done
+    
+    # sort status.txt in alphabetical order
+    $(sort "$status" -o "$status")
+    
+    # traverse through every filename in status.txt
+    while read -r filename
+    do
+        repo_version="$commit.$last_ver/$filename"
+        if [ -f "$filename" ] && [ -f "$index/$filename" ] && [ -f "$repo_version" ]
+        then
+            # get comparisons of file in working, index and repo
+            diff -q "$index/$filename" "$repo_version" >/dev/null
+            index_repo=$?
+            diff -q "$filename" "$repo_version" >/dev/null
+            working_repo=$?
+            diff -q "$filename" "$index/$filename" >/dev/null
+            index_working=$?
+            if [ ! "$index_repo" -eq 0 ] && [ ! "$working_repo" -eq 0 ] && [ ! "$index_working" -eq 0 ]
+            then
+                echo "$filename - file changed, different changes staged for commit"
+            elif [ "$index_working" -eq 0 ] && [ ! "$index_repo" -eq 0 ]
+            then
+                echo "$filename - file changed, changes staged for commit"
+            elif [ ! "$index_working" -eq 0 ] && [ "$index_repo" -eq 0 ]
+            then
+                echo "$filename - file changed, changes not staged for commit"
+            elif [ "$working_repo" -eq  0 ]
+            then
+                echo "$filename - same as repo"
+            fi
+        elif [ ! -f "$filename" ] && [ ! -f "$index/$filename" ] && [ ! -f "$repo_version" ]
+        then
+            true
+        elif [ ! -f "$filename" ] && [ ! -f "$index/$filename" ] && [ -f "$repo_version" ]
+        then
+            echo "$filename - deleted"
+        elif [ -f "$filename" ] && [ -f "$index/$filename" ]
+        then
+            # get comparisons of file in working and index
+            diff -q "$filename" "$index/$filename" >/dev/null
+            index_working=$?
+            if [ "$index_working" -eq 0 ]
+            then
+                echo "$filename - added to index"
+            else
+                echo "$filename - added to index, file changed"
+            fi
+        elif [ ! -f "$filename" ] && [ -f "$index/$filename" ]
+        then
+            if [ -f "$repo_version" ]
+            then
+                # get comparisons of file in index and repo
+                diff -q "$index/$filename" "$repo_version" >/dev/null
+                index_repo=$?
+                if [ ! "$index_repo" -eq 0 ]
+                then
+                    # file deleted and staged in index
+                    echo "$filename - added to index, file deleted"
+                else
+                    # file deleted from working but still in index
+                    echo "$filename - file deleted"
+                fi
+            else
+                # file deleted and staged in index
+                echo "$filename - added to index, file deleted"
+            fi
+        else
+            echo "$filename - untracked"
+        fi
+    done < "$status"
+fi
+
+

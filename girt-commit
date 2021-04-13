@@ -1,0 +1,104 @@
+#!/bin/dash
+
+directory=".girt"
+index="$directory/index"
+commit="$directory/commit"
+log="$directory/log.txt"
+
+if [ ! -d "$directory" ]
+then
+    echo "girt-commit: error: girt repository directory .girt not found"
+    exit 1
+elif [ ! $# -eq 2 ] && [ ! $# -eq 3 ]
+then
+    # can either take 2 or 3 arguments (-a, -m, commit-message)
+    echo "usage: girt-commit [-a] -m commit-message"
+    exit 1
+elif [ ! -d "$index" ]
+then
+    # if no index
+    echo "nothing to commit"
+    exit 1
+fi
+
+# code below checks correct arguments
+if [ $# -eq 2 ]
+then
+    if [ "$1" != "-m" ]
+    then
+        echo "usage: girt-commit [-a] -m commit-message"
+        exit 1
+    fi
+elif [ $# -eq 3 ]
+then
+    if [ "$1" != "-a" ] && [ "$2" != "-m" ]
+    then
+        echo "usage: girt-commit [-a] -m commit-message"
+        exit 1
+    fi
+    # commit -a code here
+    for file in $(ls $index)
+    do
+        if [ -f "$PWD/$file" ]
+        then
+            cp "$PWD/$file" "$index/$file"
+        else
+            # if the file no longer exists in current directory, 
+            # also update in index by deleting
+            rm "$index/$file"
+        fi
+    done
+fi
+
+# iterate through commits to get the latest version + 1 (next commit number)
+version=0
+while :
+do
+    if [ ! -d "$commit.$version" ]
+    then
+        break
+    else
+        version=$((version + 1))
+    fi
+done
+
+# checks if last version of commit is same as index, if so nothing to commit
+last_ver=$((version - 1))
+if [ ! "$version" -eq 0 ]
+then
+    diff -q "$index" "$commit.$last_ver" >/dev/null
+    if [ $? -eq 0 ]
+    then
+        echo "nothing to commit"
+        exit 1
+    fi
+else 
+    if [ -z "$(ls -A -- $index)" ]
+    then
+        # if there has been no previous commits and the index is empty, there is
+        # nothing to commit
+        echo "nothing to commit"
+        exit 1
+    fi
+fi
+
+# make next commit version
+mkdir "$commit.$version"
+
+for file in $(ls $index)
+do
+    cp "$index/$file" "$commit.$version/$file"
+done
+
+# add the commit number and message into log.txt
+if [ ! -f "$log" ]
+then
+    echo "$version $2" > $log
+else
+    # append newest commit as first line instead of at the end
+    echo "$version $2" | cat - $log > temp && mv temp $log
+fi
+echo "Committed as commit $version"
+exit 0
+
+

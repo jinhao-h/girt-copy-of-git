@@ -1,0 +1,225 @@
+#!/bin/dash
+
+directory=".girt"
+index="$directory/index"
+commit="$directory/commit"
+to_remove="$directory/to_remove.txt"
+
+if [ ! -d "$directory" ]
+then
+    echo "girt-rm: error: girt repository directory .girt not found"
+    exit 1
+fi
+
+# create temp file to log all the files to remove at the end
+touch "$to_remove"
+
+# iterate through commits to get the latest version + 1 (next commit number)
+version=0
+while :
+do
+    if [ ! -d "$commit.$version" ]
+    then
+        break
+    else
+        version=$((version + 1))
+    fi
+done
+last_ver=$((version - 1))
+
+if [ "$1" = "--force" ] && [ "$2" != "--cached" ]
+then
+    # script called with --force
+    for file in "$@"
+    do
+        # make sure we skip the first argument
+        if [ "$file" != "$1" ]
+        then
+            if [ ! -d "$index" ]
+            then
+                echo "girt-rm: error: '$file' is not in the girt repository"
+                exit 1
+            elif [ ! -f "$index/$file" ]
+            then
+                echo "girt-rm: error: '$file' is not in the girt repository"
+                exit 1
+            else
+                if [ -f "$file" ]
+                then
+                    # rm "$file"
+                    echo "$file" >> "$to_remove"
+                fi
+                # rm "$index/$file"
+                echo "$index/$file" >> "$to_remove" 
+            fi  
+        fi  
+    done             
+elif [ "$1" = "--cached" ] && [ "$2" != "--force" ]
+then
+    # script called with --cached
+    for file in "$@"
+    do
+        # make sure we skip the first argument
+        if [ "$file" != "$1" ]
+        then
+            repo_version="$commit.$last_ver/$file"
+            # set comparisons to -1 first
+            index_repo=-1
+            working_repo=-1
+            index_working=-1
+            # file exists in index and repo but not working comparison
+            if [ -f "$index/$file" ] && [ -f "$repo_version" ]
+            then
+                
+                diff -q "$index/$file" "$repo_version" >/dev/null
+                index_repo=$?
+            fi
+            # file exists in working and repo but not index comparison
+            if [ -f "$file" ] && [ -f "$repo_version" ]
+            then
+                diff -q "$file" "$repo_version" >/dev/null
+                working_repo=$?
+            fi
+            # file exists in index and working but not repo comparison
+            if [ -f "$file" ] && [ -f "$index/$file" ]
+            then
+                diff -q "$file" "$index/$file" >/dev/null
+                index_working=$?
+            fi
+            # remove files if safe to do so
+            if [ ! -f "$index/$file" ]
+            then
+                echo "girt-rm: error: '$file' is not in the girt repository"
+                exit 1
+            elif [ ! "$index_repo" -eq 0 ] && [ ! "$index_working" -eq 0 ] && [ -f "$file" ]
+            then
+                echo "girt-rm: error: '$file' in index is different to both to the working file and the repository"
+                exit 1
+            else 
+                # rm "$index/$file 
+                echo "$index/$file" >> "$to_remove"
+            fi
+        fi
+        
+    done  
+elif [ "$1" = "--force" ] && [ "$2" = "--cached" ]
+then
+    # script called with --force and --cached
+    for file in "$@"
+    do
+        # make sure we skip the first two arguments
+        if [ "$file" != "$1" ] && [ "$file" != "$2" ]
+        then
+            if [ ! -d "$index" ]
+            then
+                echo "girt-rm: error: '$file' is not in the girt repository"
+                exit 1
+            elif [ ! -f "$index/$file" ]
+            then
+                echo "girt-rm: error: '$file' is not in the girt repository"
+                exit 1
+            else                
+                # rm "$index/$file"
+                echo "$index/$file" >> "$to_remove"
+                    
+            fi  
+        fi  
+    done 
+elif [ ! $# -eq 0 ]
+then
+    # script called with just file names
+    if [ "$1" = "--force" ] || [ "$1" = "--cached" ]
+    then
+        echo "usage: girt-rm [--force] [--cached] <filenames>"
+        exit 1
+    fi
+    for file in "$@"
+    do
+        repo_version="$commit.$last_ver/$file"
+        # set comparisons to -1 first
+        index_repo=-1
+        working_repo=-1
+        index_working=-1
+        # file exists in index and repo but not working comparison
+        if [ -f "$index/$file" ] && [ -f "$repo_version" ]
+        then
+            diff -q "$index/$file" "$repo_version" >/dev/null
+            index_repo=$?
+        fi
+        # file exists in working and repo but not index comparison
+        if [ -f "$file" ] && [ -f "$repo_version" ]
+        then
+            diff -q "$file" "$repo_version" >/dev/null
+            working_repo=$?
+        fi
+        # file exists in index and working but not repo comparison
+        if [ -f "$file" ] && [ -f "$index/$file" ]
+        then
+            diff -q "$file" "$index/$file" >/dev/null
+            index_working=$?
+        fi
+        # remove files if safe to do so
+        if [ ! -d "$index" ]
+        then
+            echo "girt-rm: error: '$file' is not in the girt repository"
+            exit 1
+        elif [ ! -f "$index/$file" ]
+        then
+            echo "girt-rm: error: '$file' is not in the girt repository"
+            exit 1
+        elif [ ! -f "$repo_version" ]
+        then
+            if [ -f "$index/$file" ] && [ -f "$file" ]
+            then
+                # file doesnt exist in repo but staged in index
+                echo "girt-rm: error: '$file' has staged changes in the index"
+                exit 1
+            elif [ -f "$index/$file" ] && [ ! -f "$file" ]
+            then
+                # file doesn't exist in working so delete in index
+                # rm "$index/$file"
+                echo "$index/$file" >> "$to_remove"
+            else
+                # file doesnt exist in repo
+                echo "girt-rm: error: '$file' is not in the girt repository"
+                exit 1
+            fi
+        elif [ "$index_repo" -eq 0 ] && [ ! "$working_repo" -eq 0 ] && [ -f "$file" ]
+        then
+            echo "girt-rm: error: '$file' in the repository is different to the working file"
+            exit 1
+        elif [ ! "$index_repo" -eq 0 ] && [ ! "$index_working" -eq 0 ] && [ -f "$file" ]
+        then
+            echo "girt-rm: error: '$file' in index is different to both to the working file and the repository"
+            exit 1
+        elif [ ! "$index_repo" -eq 0 ] && [ -f "$file" ]
+        then
+            # file exists in repo but different to index
+            echo "girt-rm: error: '$file' has staged changes in the index"
+            exit 1
+        else
+            if [ -f "$file" ]
+            then                
+                # rm "$file"
+                echo "$file" >> "$to_remove"
+            fi
+            if [ -f "$index/$file" ]
+            then                
+                # rm "$index/$file"
+                echo "$index/$file" >> "$to_remove"
+            fi
+        fi
+    done
+else
+    echo "usage: girt-rm [--force] [--cached] <filenames>"
+    exit 1
+fi
+
+# remove all necessary files, then delete to_remove.txt
+while read -r remove_file
+do
+    rm "$remove_file"
+done < "$to_remove"
+rm "$to_remove"
+
+

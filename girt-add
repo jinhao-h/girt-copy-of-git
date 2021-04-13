@@ -1,0 +1,48 @@
+#!/bin/dash
+
+directory=".girt"
+index="$directory/index"
+status="$directory/status.txt"
+
+if [ ! -d "$directory" ]
+then
+    echo "girt-add: error: girt repository directory .girt not found"
+    exit 1
+elif [ $# -eq 0 ]
+then
+    echo "usage: girt-add <filenames>"
+    exit 1
+fi
+
+# make index directory if it doesn't exist
+if [ ! -d "$index" ]
+then
+    mkdir $index
+fi
+
+# make status.txt if it doesn't exist
+if [ ! -f "$status" ]
+then
+    touch $status
+fi
+
+for filename in "$@"
+do
+    if [ ! -f "$filename" ]
+    then
+        if [ -f "$index/$filename" ]
+        then
+            rm "$index/$filename"
+            exit 0
+        else
+            echo "girt-add: error: can not open '$filename'"
+            exit 1
+        fi
+    else
+        cp "$filename" "$index/$file"
+        if ! grep -q "$filename" "$status"
+        then  
+            echo "$filename" >> "$status"
+        fi
+    fi
+done

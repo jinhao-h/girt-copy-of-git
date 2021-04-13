@@ -1,0 +1,63 @@
+#!/bin/dash
+
+directory=".girt"
+index="$directory/index"
+commit="$directory/commit"
+
+if [ ! -d "$directory" ]
+then
+    echo "girt-show: error: girt repository directory .girt not found"
+    exit 1
+elif [ ! $# -eq 1 ]
+then
+    echo "usage: girt-show <commit>:<filename>"
+    exit 1
+elif ! echo "$1" | grep -E ":"  > /dev/null
+then
+    # if the argument entered is not valid
+    echo "girt-show: error: invalid object $1"
+    exit 1
+fi
+
+# iterate through commits to get the latest version + 1 (next commit number)
+version=0
+while :
+do
+    if [ ! -d "$commit.$version" ]
+    then
+        break
+    else
+        version=$((version + 1))
+    fi
+done
+last_ver=$((version - 1))
+
+# get the commit number and filename to show from argument
+commit_no=$(echo $1 | cut -d':' -f1)
+filename=$(echo $1 | cut -d':' -f2)
+
+if [ "$commit_no" = "" ]
+then
+    # showing files in index
+    if [ ! -f "$index/$filename" ]
+    then
+        echo "girt-show: error: '$filename' not found in index"
+    else
+        cat "$index/$filename"
+        exit 0
+    fi 
+elif [ $commit_no -gt $last_ver ]
+then 
+    # commit number greater than current version, no commmit to show
+    echo "girt-show: error: unknown commit '$commit_no'"
+    exit 1
+elif [ ! -f "$commit.$commit_no/$filename" ]
+then
+    # no filename for the given commit number
+    echo "girt-show: error: '$filename' not found in commit $commit_no"
+    exit 1
+else
+    cat "$commit.$commit_no/$filename"
+    exit 0
+fi
+
